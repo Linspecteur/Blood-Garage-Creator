@@ -255,28 +255,25 @@ Citizen.CreateThread(function()
                     end
                 end
 
-                -- Vérification du Job si spécifié pour ce garage
-                if not garage.job or (PlayerData.job and PlayerData.job.name == garage.job) then
+                -- POINT D'OUVERTURE DU GARAGE (INTERACTION PNJ)
+                local distMenu = distPed
+                if distMenu < 10.0 then
+                    wait = 0
                     
-                    -- POINT D'OUVERTURE DU GARAGE (INTERACTION PNJ)
-                    local distMenu = distPed
-                    if distMenu < 10.0 then
-                        wait = 0
+                    -- Interaction proche (3.0 mètres max pour parler au garagiste - ultra accessible !)
+                    if distMenu < 3.0 then
+                        InsideMarker = true
+                        CurrentGarage = id
+                        CurrentAction = "menu"
                         
-                        -- Interaction proche (3.0 mètres max pour parler au garagiste - ultra accessible !)
-                        if distMenu < 3.0 then
-                            InsideMarker = true
-                            CurrentGarage = id
-                            CurrentAction = "menu"
-                            
-                            -- Texte dynamique selon le type (Fourrière ou Garagiste)
-                            local msg = _T('open_garage')
-                            if garage.type == 'impound' then
-                                msg = _T('open_impound')
-                            end
-                            showHelpNotification(msg)
+                        -- Texte dynamique selon le type (Fourrière ou Garagiste)
+                        local msg = _T('open_garage')
+                        if garage.type == 'impound' then
+                            msg = _T('open_impound')
                         end
+                        showHelpNotification(msg)
                     end
+                end
 
                 -- POINT DE RANGER LE VEHICULE (si disponible, visible même à pied)
                 if garage.delete then
@@ -299,8 +296,6 @@ Citizen.CreateThread(function()
                         end
                     end
                 end
-
-                end -- Fin de la vérification du Job
             end -- Fin de if garage.coords
         end -- Fin du for loop
 

@@ -25,7 +25,6 @@
 - 🅿️ **Rangement Confortable :** Zone de marker rouge visible de 7 mètres de diamètre pour ranger les véhicules facilement, même à pied ou en grand convoi.
 - ⚡ **Sécurité Anti-Duplication :** Blocage automatique du spawn si le véhicule est déjà dehors, remplacé par un système de **Balise GPS** active en jeu pour le localiser.
 - 🧹 **Nettoyage Automatique (Auto-Impound) :** Routine serveur autonome envoyant les véhicules abandonnés à la fourrière après 10 minutes d'inactivité.
-- 💼 **Garages de Faction (Job) :** Restreignez n'importe quel garage à une faction spécifique (LSPD, EMS, etc.) directement dans la configuration.
 - 💸 **Frais Paramétrables :** Taxes de récupération de fourrière et frais de livraison d'un garage à un autre (valet de livraison) configurables à la volée.
 - 💬 **Débogage Silencieux :** Interrupteur `Config.Debug = false` pour des consoles de jeu et serveur entièrement propres par défaut.
 
