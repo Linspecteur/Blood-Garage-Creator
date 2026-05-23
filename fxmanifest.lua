@@ -2,8 +2,8 @@ fx_version 'cerulean'
 game 'gta5'
 
 description 'BloodLeak Modern Garage System'
-author 'Antigravity'
-version '1.0.0'
+author 'BloodLeak'
+version '1.0.6'
 
 ui_page 'html/index.html'
 
