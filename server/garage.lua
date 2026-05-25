@@ -64,15 +64,20 @@ function registerServerCallbacks()
             return
         end
 
-        local cleanPlate = string.gsub(plate, "^%s*(.-)%s*$", "%1"):upper()
+        local cleanPlate = string.gsub(plate or "", "^%s*(.-)%s*$", "%1"):upper()
+        local noSpacePlate = string.gsub(plate or "", "[^%w]", ""):upper()
 
-        MySQL.query("SELECT 1 FROM owned_vehicles WHERE owner = ? AND plate = ?", { 
+        MySQL.query("SELECT 1 FROM owned_vehicles WHERE owner = ? AND (plate = ? OR REPLACE(plate, ' ', '') = ?)", { 
             xPlayer.identifier, 
-            cleanPlate 
+            cleanPlate,
+            noSpacePlate
         }, function(results)
             if results and #results > 0 then
                 cb(true)
             else
+                local resType = type(results)
+                local resLen = results and #results or 0
+                debugPrint(string.format("^3[bl_garage DEBUG F8]^0 checkVehicleOwner FAILED! Player: %s, Plate sent: '%s', Cleaned: '%s', resType: %s, resLen: %d", xPlayer.identifier, tostring(plate), tostring(cleanPlate), resType, resLen))
                 cb(false)
             end
         end)
@@ -86,11 +91,13 @@ function registerServerCallbacks()
             return
         end
 
-        local cleanPlate = string.gsub(plate, "^%s*(.-)%s*$", "%1"):upper()
+        local cleanPlate = string.gsub(plate or "", "^%s*(.-)%s*$", "%1"):upper()
+        local noSpacePlate = string.gsub(plate or "", "[^%w]", ""):upper()
 
-        MySQL.query("SELECT * FROM owned_vehicles WHERE owner = ? AND plate = ?", { 
+        MySQL.query("SELECT * FROM owned_vehicles WHERE owner = ? AND (plate = ? OR REPLACE(plate, ' ', '') = ?)", { 
             xPlayer.identifier, 
-            cleanPlate 
+            cleanPlate,
+            noSpacePlate
         }, function(results)
             if results and #results > 0 then
                 local vehicleData = results[1]
@@ -98,6 +105,7 @@ function registerServerCallbacks()
                 -- Mettre à jour en BDD à dehors (stored = 0)
                 updateVehicleStorage(cleanPlate, 0, garageId, xPlayer.identifier, nil, function(affectedRows)
                     local props = safeJsonDecode(vehicleData.vehicle)
+                    props.plate = vehicleData.plate -- Force la plaque exacte de la DB
                     cb(true, props)
                 end)
             else
@@ -114,7 +122,8 @@ function registerServerCallbacks()
             return
         end
 
-        local cleanPlate = string.gsub(plate, "^%s*(.-)%s*$", "%1"):upper()
+        local cleanPlate = string.gsub(plate or "", "^%s*(.-)%s*$", "%1"):upper()
+        local noSpacePlate = string.gsub(plate or "", "[^%w]", ""):upper()
         local fee = Config.ImpoundFee or 1500
 
         -- Vérifier l'argent du joueur
@@ -130,9 +139,10 @@ function registerServerCallbacks()
         end
 
         if hasEnough then
-            MySQL.query("SELECT * FROM owned_vehicles WHERE owner = ? AND plate = ?", { 
+            MySQL.query("SELECT * FROM owned_vehicles WHERE owner = ? AND (plate = ? OR REPLACE(plate, ' ', '') = ?)", { 
                 xPlayer.identifier, 
-                cleanPlate 
+                cleanPlate,
+                noSpacePlate
             }, function(results)
                 if results and #results > 0 then
                     local vehicleData = results[1]
@@ -147,6 +157,7 @@ function registerServerCallbacks()
                     -- Mettre à jour en BDD à dehors (stored = 0) et assigner au garage actuel
                     updateVehicleStorage(cleanPlate, 0, garageId, xPlayer.identifier, nil, function(affectedRows)
                         local props = safeJsonDecode(vehicleData.vehicle)
+                        props.plate = vehicleData.plate
                         cb(true, props)
                     end)
                 else
@@ -166,7 +177,8 @@ function registerServerCallbacks()
             return
         end
 
-        local cleanPlate = string.gsub(plate, "^%s*(.-)%s*$", "%1"):upper()
+        local cleanPlate = string.gsub(plate or "", "^%s*(.-)%s*$", "%1"):upper()
+        local noSpacePlate = string.gsub(plate or "", "[^%w]", ""):upper()
         local fee = Config.TransferFee or 500
 
         -- Vérifier l'argent du joueur
@@ -182,9 +194,10 @@ function registerServerCallbacks()
         end
 
         if hasEnough then
-            MySQL.query("SELECT * FROM owned_vehicles WHERE owner = ? AND plate = ?", { 
+            MySQL.query("SELECT * FROM owned_vehicles WHERE owner = ? AND (plate = ? OR REPLACE(plate, ' ', '') = ?)", { 
                 xPlayer.identifier, 
-                cleanPlate 
+                cleanPlate,
+                noSpacePlate
             }, function(results)
                 if results and #results > 0 then
                     local vehicleData = results[1]
@@ -199,6 +212,7 @@ function registerServerCallbacks()
                     -- Mettre à jour en BDD à dehors (stored = 0) et assigner au garage actuel
                     updateVehicleStorage(cleanPlate, 0, garageId, xPlayer.identifier, nil, function(affectedRows)
                         local props = safeJsonDecode(vehicleData.vehicle)
+                        props.plate = vehicleData.plate
                         cb(true, props)
                     end)
                 else

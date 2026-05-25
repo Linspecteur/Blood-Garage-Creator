@@ -250,20 +250,17 @@ function IsSpawnPointClear(coords, radius)
     return #vehicles == 0
 end
 
--- Récupérer tous les véhicules proches
+-- Récupérer tous les véhicules proches via le pool de jeu natif (100% stable et indépendant d'ESX)
 function GetVehiclesInArea(coords, radius)
     local vehicles = {}
-    local handle, vehicle = FindFirstVehicle()
-    local success
-
-    repeat
-        local vehicleCoords = GetEntityCoords(vehicle)
-        if #(coords - vehicleCoords) < radius then
-            table.insert(vehicles, vehicle)
+    local allVehicles = GetGamePool('CVehicle')
+    for _, vehicle in ipairs(allVehicles) do
+        if DoesEntityExist(vehicle) then
+            local vehicleCoords = GetEntityCoords(vehicle)
+            if #(coords - vehicleCoords) < radius then
+                table.insert(vehicles, vehicle)
+            end
         end
-        success, vehicle = FindNextVehicle(handle)
-    until not success
-
-    EndFindVehicle(handle)
+    end
     return vehicles
 end

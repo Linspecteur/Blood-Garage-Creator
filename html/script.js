@@ -44,7 +44,11 @@ window.addEventListener('message', function(event) {
         let typeText = "VOITURES";
         if (GarageType === "boat") typeText = "BATEAUX";
         else if (GarageType === "air") typeText = "AÉRONEFS";
-        else if (GarageType === "impound") typeText = "FOURRIÈRE";
+        else if (GarageType === "helicopter") typeText = "HÉLICOPTÈRES";
+        else if (GarageType === "impound") typeText = "FOURRIÈRE VOITURES";
+        else if (GarageType === "impound_boat") typeText = "FOURRIÈRE BATEAUX";
+        else if (GarageType === "impound_air") typeText = "FOURRIÈRE AÉRONEFS";
+        else if (GarageType === "impound_helicopter") typeText = "FOURRIÈRE HÉLICOPTÈRES";
         document.getElementById('garage-type-badge').innerText = typeText;
 
         // Gérer la visibilité du bouton Admin
@@ -80,8 +84,30 @@ window.addEventListener('message', function(event) {
         closeGarage();
     } else if (data.action === "tempHide") {
         AppContainer.classList.add('temp-hidden');
+        
+        // Show premium volcanic selection overlay
+        const selectionOverlay = document.getElementById('selection-overlay');
+        if (selectionOverlay) {
+            const subtitle = document.getElementById('selection-subtitle');
+            if (subtitle) {
+                let labelType = "Spawn Véhicule";
+                if (data.type === "ped") {
+                    labelType = "Position du PNJ (Garagiste)";
+                } else if (data.type === "delete") {
+                    labelType = "Zone de Rangement du Véhicule";
+                }
+                subtitle.innerText = `Placement: ${labelType}`;
+            }
+            selectionOverlay.classList.remove('hidden');
+        }
     } else if (data.action === "tempRestore") {
         AppContainer.classList.remove('temp-hidden');
+        
+        // Hide selection overlay
+        const selectionOverlay = document.getElementById('selection-overlay');
+        if (selectionOverlay) {
+            selectionOverlay.classList.add('hidden');
+        }
     } else if (data.action === "coordsSelected") {
         const coords = data.coords || { x: 0.0, y: 0.0, z: 0.0, w: 0.0 };
         if (data.type === 'ped') {
@@ -353,7 +379,7 @@ function renderVehicleDetails(veh) {
     }, 150);
 
     // Configuration du gros bouton d'action
-    const isImpoundGarage = (GarageType === "impound");
+    const isImpoundGarage = (GarageType === "impound" || GarageType === "impound_boat" || GarageType === "impound_air" || GarageType === "impound_helicopter");
     
     // Récupérer le conteneur d'actions de manière dynamique
     const actionContainer = document.getElementById('action-container');
@@ -397,9 +423,10 @@ function renderVehicleDetails(veh) {
             btn.className = 'action-btn impound-action';
             btn.style.flex = '1';
             
-            // Récupérer le nom du garage d'origine
-            const garageKey = veh.originalGarage || 'AUTRE GARAGE';
-            btn.innerHTML = `<i class="fa-solid fa-truck-ramp-box"></i> LIVRER DEPUIS ${garageKey.toUpperCase()} (${TransferFee}$)`;
+            // Récupérer le nom convivial du garage d'origine au lieu de son ID brut
+            const originalGarageObj = ImpoundsList[veh.originalGarage];
+            const garageName = (originalGarageObj && originalGarageObj.label) ? originalGarageObj.label : (veh.originalGarage || 'AUTRE GARAGE');
+            btn.innerHTML = `<i class="fa-solid fa-truck-ramp-box"></i> LIVRER DEPUIS ${garageName.toUpperCase()} (${TransferFee}$)`;
             btn.addEventListener('click', function() {
                 playSelectSound();
                 transferVehicle(veh.plate);
@@ -555,7 +582,11 @@ function populateImpoundSelect() {
         car: { label: 'Garages Voitures', items: [] },
         boat: { label: 'Garages Bateaux', items: [] },
         air: { label: 'Garages Aéronefs', items: [] },
-        impound: { label: 'Fourrières', items: [] }
+        helicopter: { label: 'Garages Hélicoptères', items: [] },
+        impound: { label: 'Fourrières Voitures', items: [] },
+        impound_boat: { label: 'Fourrières Bateaux', items: [] },
+        impound_air: { label: 'Fourrières Aéronefs', items: [] },
+        impound_helicopter: { label: 'Fourrières Hélicoptères', items: [] }
     };
     
     for (const [id, imp] of Object.entries(ImpoundsList)) {
@@ -628,6 +659,9 @@ function loadSelectedImpoundData() {
         document.getElementById('coord-delete-x').value = '0.00';
         document.getElementById('coord-delete-y').value = '0.00';
         document.getElementById('coord-delete-z').value = '0.00';
+        document.getElementById('admin-delete-size').value = '7.0';
+        document.getElementById('admin-blip-sprite').value = '357';
+        document.getElementById('admin-blip-color').value = '3';
     } else {
         if (deleteBtn) deleteBtn.classList.remove('hidden');
         const imp = ImpoundsList[selectedId];
@@ -658,16 +692,22 @@ function loadSelectedImpoundData() {
         document.getElementById('coord-delete-x').value = (deleteCoords.x || 0.0).toFixed(2);
         document.getElementById('coord-delete-y').value = (deleteCoords.y || 0.0).toFixed(2);
         document.getElementById('coord-delete-z').value = (deleteCoords.z || 0.0).toFixed(2);
+        document.getElementById('admin-delete-size').value = (imp.deleteSize !== undefined ? parseFloat(imp.deleteSize).toFixed(1) : '7.0');
+        document.getElementById('admin-blip-sprite').value = (imp.blipSprite !== undefined ? imp.blipSprite : 357).toString();
+        document.getElementById('admin-blip-color').value = (imp.blipColor !== undefined ? imp.blipColor : 3).toString();
     }
 
     renderSpawnPointsList();
 
     // Gérer la visibilité du point de rangement (masqué si fourrière)
     const pointType = adminTypeSelect ? adminTypeSelect.value : 'car';
+    const sizeSection = document.getElementById('admin-delete-size-section');
     if (pointType === 'impound') {
         if (deleteCoordsSection) deleteCoordsSection.style.display = 'none';
+        if (sizeSection) sizeSection.style.display = 'none';
     } else {
         if (deleteCoordsSection) deleteCoordsSection.style.display = 'block';
+        if (sizeSection) sizeSection.style.display = 'block';
     }
 }
 
@@ -852,10 +892,14 @@ const adminTypeSelect = document.getElementById('admin-type-select');
 if (adminTypeSelect) {
     adminTypeSelect.addEventListener('change', function() {
         const deleteCoordsSection = document.getElementById('admin-delete-coords-section');
-        if (adminTypeSelect.value === 'impound') {
+        const sizeSection = document.getElementById('admin-delete-size-section');
+        const isAnyImpound = ['impound', 'impound_boat', 'impound_air', 'impound_helicopter'].includes(adminTypeSelect.value);
+        if (isAnyImpound) {
             if (deleteCoordsSection) deleteCoordsSection.style.display = 'none';
+            if (sizeSection) sizeSection.style.display = 'none';
         } else {
             if (deleteCoordsSection) deleteCoordsSection.style.display = 'block';
+            if (sizeSection) sizeSection.style.display = 'block';
         }
     });
 }
@@ -909,8 +953,11 @@ AdminSaveBtn.addEventListener('click', function() {
         coords: { x: pedX, y: pedY, z: pedZ },
         pedHeading: pedH,
         pedModel: AdminPedSelect.value,
+        blipSprite: parseInt(document.getElementById('admin-blip-sprite').value) || 357,
+        blipColor: parseInt(document.getElementById('admin-blip-color').value) || 3,
         spawn: spawnPoints.length > 0 ? spawnPoints : [{ x: 0.0, y: 0.0, z: 0.0, w: 0.0 }],
-        delete: { x: deleteX, y: deleteY, z: deleteZ }
+        delete: { x: deleteX, y: deleteY, z: deleteZ },
+        deleteSize: parseFloat(document.getElementById('admin-delete-size').value) || 7.0
     };
     
     // Envoyer au client pour sauvegarde persistante côté serveur

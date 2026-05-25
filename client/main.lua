@@ -190,11 +190,15 @@ function spawnSinglePed(id)
                 SetEntityAsMissionEntity(ped, true, true) -- Rendre le PNJ persistant au niveau du moteur
                 SetEntityInvincible(ped, true)
                 SetBlockingOfNonTemporaryEvents(ped, true)
+                TaskSetBlockingOfNonTemporaryEvents(ped, true) -- Force la non-réaction aux événements (coups de feu, etc)
                 SetEntityCanBeDamaged(ped, false)
                 SetPedCanRagdollFromPlayerImpact(ped, false)
+                SetPedCanRagdoll(ped, false)
                 SetPedCanPlayAmbientAnims(ped, true)
                 SetPedFleeAttributes(ped, 0, 0)
                 SetPedCombatAttributes(ped, 17, true)
+                SetEntityProofs(ped, true, true, true, true, true, true, true, true) -- Invulnérable à tout
+                SetPedConfigFlag(ped, 281, true) -- Disable Cowering
                 
                 -- Figer immédiatement pour stabiliser la position au sol
                 FreezeEntityPosition(ped, true)
@@ -218,6 +222,12 @@ function initGarage()
     print('^2[bl_garage] Initialisation du parc (PNJs + Blips)...^0')
     createBlips()
     cleanupPeds() -- La routine du thread s'occupera d'instancier les PNJs à proximité
+
+    -- Bloc Diagnostic F8 pour vérifier les valeurs exactes chargées
+    for id, g in pairs(Config.Garages) do
+        print(string.format("[bl_garage DIAGNOSTIC] Garage ID: %s | Type: %s | Point Rangement (delete): %s | Taille Rangement (deleteSize): %s", 
+            tostring(id), tostring(g.type), tostring(g.delete), tostring(g.deleteSize)))
+    end
 end
 
 -- Nettoyage propre lors du redémarrage de la ressource
@@ -278,17 +288,52 @@ Citizen.CreateThread(function()
                 -- POINT DE RANGER LE VEHICULE (si disponible, visible même à pied)
                 if garage.delete then
                     local distDelete = #(coords - garage.delete)
-                    if distDelete < Config.Marker.DrawDistance then
+                    if distDelete < 30.0 then -- Increased draw distance for storage zone (from 15m to 30m)
                         wait = 0
-                        -- Dessiner une grande zone rouge bien visible (7.0 mètres de large)
-                        DrawMarker(1, garage.delete.x, garage.delete.y, garage.delete.z - 0.95, 
-                            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
-                            7.0, 7.0, 1.2, 
-                            239, 68, 68, 180, -- Rouge translucide moderne haute intensité
-                            false, false, 2, false, nil, nil, false)
+                        local size = 7.0
+                        if type(garage.deleteSize) == 'number' then
+                            size = garage.deleteSize
+                        elseif type(garage.deleteSize) == 'string' then
+                            size = tonumber(garage.deleteSize) or 7.0
+                        end
+                        -- Calcul de la hauteur Z exacte du sol à cette position (résout définitivement le conflit Z pieds/bassin)
+                        local groundZ = garage.delete.z
+                        if garage.type ~= "boat" and garage.type ~= "impound_boat" then
+                            local foundGround, trueGroundZ = GetGroundZFor_3dCoord(garage.delete.x, garage.delete.y, garage.delete.z + 2.0, false)
+                            if foundGround then
+                                groundZ = trueGroundZ
+                            end
+                        end
                         
-                        -- L'interaction est maintenant possible jusqu'à 7.0 mètres de distance !
-                        if distDelete < 7.0 and IsPedInAnyVehicle(playerPed, false) then
+                        local radius = size / 2.0
+                        
+                        -- 1. Lumière dynamique rouge volcanique (100% visible sur tous les packs graphiques)
+                        DrawLightWithRange(garage.delete.x, garage.delete.y, groundZ + 0.2,
+                            239, 68, 68, radius + 1.0, 4.5)
+                        
+                        -- 2. Icône clé/voiture rotative au centre (Type 36 — style NoPixel)
+                        DrawMarker(36, garage.delete.x, garage.delete.y, groundZ + 0.35,
+                            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                            0.6, 0.6, 0.6,
+                            239, 68, 68, 255,
+                            true, true, 2, true)
+                        
+                        -- 3. Cercle périphérique : 16 petits cylindres positionnés mathématiquement sur le périmètre
+                        --    Fonctionne sur TOUS les PC et packs graphiques, indépendamment des shaders
+                        local segments = 16
+                        for i = 0, segments - 1 do
+                            local angle = (i / segments) * (2.0 * math.pi)
+                            local dotX = garage.delete.x + radius * math.cos(angle)
+                            local dotY = garage.delete.y + radius * math.sin(angle)
+                            DrawMarker(1, dotX, dotY, groundZ - 0.02,
+                                0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                0.35, 0.35, 0.25,
+                                239, 68, 68, 230,
+                                false, false, 2, false)
+                        end
+                        
+                        -- L'interaction s'adapte également à la taille du point de rangement
+                        if distDelete < size and IsPedInAnyVehicle(playerPed, false) then
                             InsideMarker = true
                             CurrentGarage = id
                             CurrentAction = "store"
@@ -470,15 +515,36 @@ function openGarageMenu(garageId)
             
             local showVehicle = false
             local currentGarageType = garage.type or "car"
+            local isHeli = (vehicleClass == 15) -- Hélicoptères uniquement (class 15)
+            local isPlane = (vehicleClass == 16) -- Avions uniquement (class 16)
+            -- Reclassifier isAir : avions + helis pour les garages génériques
             
             if currentGarageType == "car" and not isBoat and not isAir then
                 showVehicle = true
             elseif currentGarageType == "boat" and isBoat then
                 showVehicle = true
-            elseif (currentGarageType == "air" or currentGarageType == "helicopter") and isAir then
+            elseif currentGarageType == "air" and isAir then
+                showVehicle = true
+            elseif currentGarageType == "helicopter" and isHeli then
                 showVehicle = true
             elseif currentGarageType == "impound" then
-                if isStored == 0 or isStored == 2 then
+                -- Fourrière voitures : tout sauf bateaux et aéronefs
+                if isStored == 2 and not isBoat and not isAir then
+                    showVehicle = true
+                end
+            elseif currentGarageType == "impound_boat" then
+                -- Fourrière bateaux uniquement
+                if isStored == 2 and isBoat then
+                    showVehicle = true
+                end
+            elseif currentGarageType == "impound_air" then
+                -- Fourrière avions uniquement (class 16)
+                if isStored == 2 and isPlane then
+                    showVehicle = true
+                end
+            elseif currentGarageType == "impound_helicopter" then
+                -- Fourrière hélicoptères uniquement (class 15)
+                if isStored == 2 and isHeli then
                     showVehicle = true
                 end
             end
@@ -509,21 +575,24 @@ function openGarageMenu(garageId)
                 if type(g.spawn) == 'table' and g.spawn[1] then
                     spawnData = {}
                     for _, pt in ipairs(g.spawn) do
-                        table.insert(spawnData, { x = pt.x, y = pt.y, z = pt.z, w = pt.w or pt.heading or 0.0 })
+                        table.insert(spawnData, { x = pt.x or pt[1] or 0.0, y = pt.y or pt[2] or 0.0, z = pt.z or pt[3] or 0.0, w = pt.w or pt[4] or pt.heading or 0.0 })
                     end
                 else
-                    spawnData = { x = g.spawn.x, y = g.spawn.y, z = g.spawn.z, w = g.spawn.w or g.spawn.heading or 0.0 }
+                    spawnData = { x = g.spawn.x or g.spawn[1] or 0.0, y = g.spawn.y or g.spawn[2] or 0.0, z = g.spawn.z or g.spawn[3] or 0.0, w = g.spawn.w or g.spawn[4] or g.spawn.heading or 0.0 }
                 end
             end
  
             impoundsList[id] = {
                 label = g.label,
                 type = g.type or "car",
-                coords = { x = g.coords.x, y = g.coords.y, z = g.coords.z },
+                coords = { x = g.coords.x or g.coords[1] or 0.0, y = g.coords.y or g.coords[2] or 0.0, z = g.coords.z or g.coords[3] or 0.0 },
                 pedModel = g.pedModel or "s_m_y_xmech_01",
                 pedHeading = g.pedHeading or 0.0,
                 spawn = spawnData or { x = 0.0, y = 0.0, z = 0.0, w = 0.0 },
-                delete = g.delete and { x = g.delete.x, y = g.delete.y, z = g.delete.z } or nil
+                delete = g.delete and { x = g.delete.x or g.delete[1] or 0.0, y = g.delete.y or g.delete[2] or 0.0, z = g.delete.z or g.delete[3] or 0.0 } or nil,
+                deleteSize = g.deleteSize or 7.0,
+                blipSprite = g.blipSprite or (g.blip and g.blip.sprite) or 357,
+                blipColor = g.blipColor or (g.blip and g.blip.color) or 3
             }
         end
  

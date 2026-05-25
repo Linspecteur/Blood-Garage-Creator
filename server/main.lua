@@ -2,6 +2,51 @@
 -- BLOODLEAK PREMIUM 2026 SPLIT GARAGE DASHBOARD — SERVER/MAIN.LUA
 -- ============================================================
 
+-- Sécurité globale : S'assurer que vector3 et vector4 sont définis côté serveur (compatibilité anciens FXServer)
+if not vector3 then
+    function vector3(x, y, z)
+        return { x = x or 0.0, y = y or 0.0, z = z or 0.0 }
+    end
+end
+
+if not vector4 then
+    function vector4(x, y, z, w)
+        return { x = x or 0.0, y = y or 0.0, z = z or 0.0, w = w or 0.0 }
+    end
+end
+
+-- Helper de normalisation universelle pour les points de spawn (indépendant du type d'indexation CEF)
+function normalizeSpawnPoints(spawn)
+    if not spawn then return nil end
+    local normalized = {}
+    
+    -- Si c'est déjà un vecteur FiveM natif directement
+    if type(spawn) == 'userdata' or type(spawn) == 'vector4' or type(spawn) == 'vector3' then
+        return { { x = spawn.x, y = spawn.y, z = spawn.z, w = spawn.w or spawn.heading or 0.0 } }
+    end
+
+    if type(spawn) ~= 'table' then return nil end
+
+    -- Si c'est un point unique indexé par ses axes (ex: { x = ..., y = ... })
+    if spawn.x then
+        return { { x = tonumber(spawn.x) or 0.0, y = tonumber(spawn.y) or 0.0, z = tonumber(spawn.z) or 0.0, w = tonumber(spawn.w or spawn.heading) or 0.0 } }
+    end
+
+    -- Si c'est un tableau de points (avec des clés numériques, chaînes ou des structures complexes)
+    for k, v in pairs(spawn) do
+        if type(v) == 'table' or type(v) == 'userdata' or type(v) == 'vector4' or type(v) == 'vector3' then
+            local x = tonumber(v.x or v[1]) or 0.0
+            local y = tonumber(v.y or v[2]) or 0.0
+            local z = tonumber(v.z or v[3]) or 0.0
+            local w = tonumber(v.w or v[4] or v.heading) or 0.0
+            table.insert(normalized, { x = x, y = y, z = z, w = w })
+        end
+    end
+
+    return #normalized > 0 and normalized or nil
+end
+
+
 if ESX == nil then
     local ok, result = pcall(function() return exports['es_extended']:getSharedObject() end)
     if ok and result then
@@ -104,7 +149,8 @@ Citizen.CreateThread(function()
 end)
 
 function updateVehicleStorage(plate, stateVal, garageId, ownerIdentifier, props, cb)
-    local cleanPlate = string.gsub(plate, "^%s*(.-)%s*$", "%1"):upper()
+    local cleanPlate = string.gsub(plate or "", "^%s*(.-)%s*$", "%1"):upper()
+    local noSpacePlate = string.gsub(plate or "", "[^%w]", ""):upper()
     local query = "UPDATE owned_vehicles SET "
     local params = {}
 
@@ -129,12 +175,14 @@ function updateVehicleStorage(plate, stateVal, garageId, ownerIdentifier, props,
     if #sets > 0 then
         query = query .. table.concat(sets, ", ")
         if ownerIdentifier then
-            query = query .. " WHERE `plate` = ? AND `owner` = ?"
+            query = query .. " WHERE (`plate` = ? OR REPLACE(`plate`, ' ', '') = ?) AND `owner` = ?"
             table.insert(params, cleanPlate)
+            table.insert(params, noSpacePlate)
             table.insert(params, ownerIdentifier)
         else
-            query = query .. " WHERE `plate` = ?"
+            query = query .. " WHERE `plate` = ? OR REPLACE(`plate`, ' ', '') = ?"
             table.insert(params, cleanPlate)
+            table.insert(params, noSpacePlate)
         end
         MySQL.update(query, params, function(affectedRows)
             if cb then cb(affectedRows) end
@@ -214,22 +262,29 @@ function mergeGarageConfig(id, data)
     
     if data.deleted then
         Config.Garages[id] = nil
+        CustomGarages[id] = { deleted = true } -- Nécessaire pour que le client reçoive la consigne de suppression
         return
     end
 
     if data.coords and data.spawn then
         local pointType = data.type or "impound"
-        local blipSprite = 357
-        local blipColor = 3
-        if pointType == "boat" then
-            blipSprite = 427
+        local blipSprite = tonumber(data.blipSprite)
+        local blipColor = tonumber(data.blipColor)
+        
+        if not blipSprite or blipSprite == 0 then
+            blipSprite = 357
+            if pointType == "boat" then blipSprite = 427
+            elseif pointType == "air" then blipSprite = 307
+            elseif pointType == "helicopter" then blipSprite = 422
+            elseif pointType == "impound" then blipSprite = 68
+            elseif pointType == "impound_boat" then blipSprite = 427
+            elseif pointType == "impound_air" then blipSprite = 307
+            elseif pointType == "impound_helicopter" then blipSprite = 422 end
+        end
+
+        if not blipColor or blipColor == 0 then
             blipColor = 3
-        elseif pointType == "air" then
-            blipSprite = 307
-            blipColor = 3
-        elseif pointType == "impound" then
-            blipSprite = 68
-            blipColor = 5
+            if pointType == "impound" then blipColor = 5 end
         end
 
         local originalDelete = nil
@@ -239,18 +294,19 @@ function mergeGarageConfig(id, data)
             originalJob = Config.Garages[id].job
         end
 
-        local spawnPoints = nil
-        local firstSpawn = nil
-        if type(data.spawn) == 'table' and data.spawn[1] then
-            spawnPoints = {}
-            for _, pt in ipairs(data.spawn) do
-                table.insert(spawnPoints, vector4(pt.x or 0.0, pt.y or 0.0, pt.z or 0.0, pt.w or pt.heading or 0.0))
+        local normalized = normalizeSpawnPoints(data.spawn)
+        local spawnPoints = {}
+        local firstSpawn = { x = 0.0, y = 0.0, z = 0.0, w = 0.0 }
+        if normalized then
+            for _, pt in ipairs(normalized) do
+                table.insert(spawnPoints, vector4(pt.x, pt.y, pt.z, pt.w))
             end
-            firstSpawn = data.spawn[1]
+            firstSpawn = normalized[1]
         else
-            spawnPoints = vector4(data.spawn.x or 0.0, data.spawn.y or 0.0, data.spawn.z or 0.0, data.spawn.w or data.spawn.heading or 0.0)
-            firstSpawn = data.spawn
+            spawnPoints = { vector4(0.0, 0.0, 0.0, 0.0) }
         end
+
+        data.spawn = normalized
 
         local localData = {
             label = data.label,
@@ -260,6 +316,9 @@ function mergeGarageConfig(id, data)
             pedHeading = tonumber(data.pedHeading) or 0.0,
             spawn = spawnPoints,
             delete = (pointType ~= "impound") and (data.delete and vector3(data.delete.x or 0.0, data.delete.y or 0.0, data.delete.z or 0.0) or vector3(firstSpawn.x or 0.0, firstSpawn.y or 0.0, firstSpawn.z or 0.0)) or nil,
+            deleteSize = type(data.deleteSize) == 'number' and data.deleteSize or (type(data.deleteSize) == 'string' and tonumber(data.deleteSize) or 7.0),
+            blipSprite = blipSprite,
+            blipColor = blipColor,
             blip = { active = true, sprite = blipSprite, color = blipColor, scale = 0.8, label = data.label },
             job = originalJob
         }
@@ -319,4 +378,46 @@ RegisterNetEvent('bl_garage:requestSync')
 AddEventHandler('bl_garage:requestSync', function()
     local src = source
     TriggerClientEvent('bl_garage:syncGarages', src, CustomGarages, false)
+end)
+
+local currentVersion = GetResourceMetadata(GetCurrentResourceName(), 'version', 0)
+
+local function printModernUpdateCard(current, latest)
+    print(string.format("^3[Blood-Garage-Creator] ^1▲ MISE À JOUR DISPONIBLE ^7| ^1v%s ^7-> ^2v%s ^7| ^5https://github.com/Linspecteur/Blood-Garage-Creator^0", current, latest))
+end
+
+Citizen.CreateThread(function()
+    Citizen.Wait(5000)
+    PerformHttpRequest('https://raw.githubusercontent.com/Linspecteur/Blood-Garage-Creator/main/fxmanifest.lua', function(statusCode, response, headers)
+        if statusCode == 200 and response then
+            local versionMatch = response:match("\n%s*version%s+['\"]([^'\"]+)['\"]")
+            if versionMatch then
+                if versionMatch ~= currentVersion then
+                    printModernUpdateCard(currentVersion, versionMatch)
+                else
+                    print(string.format('^3[Blood-Garage-Creator] ^2✔ Script à jour ^7| ^2v%s^0', currentVersion))
+                end
+            else
+                print('^3[Blood-Garage-Creator] ^8⚠ Impossible de lire la version distante.^0')
+            end
+        else
+            -- Si la branche par défaut est 'master' au lieu de 'main'
+            PerformHttpRequest('https://raw.githubusercontent.com/Linspecteur/Blood-Garage-Creator/master/fxmanifest.lua', function(statusCode2, response2, headers2)
+                if statusCode2 == 200 and response2 then
+                    local versionMatch = response2:match("\n%s*version%s+['\"]([^'\"]+)['\"]")
+                    if versionMatch then
+                        if versionMatch ~= currentVersion then
+                            printModernUpdateCard(currentVersion, versionMatch)
+                        else
+                            print(string.format('^3[Blood-Garage-Creator] ^2✔ Script à jour ^7| ^2v%s^0', currentVersion))
+                        end
+                    else
+                        print('^3[Blood-Garage-Creator] ^8⚠ Impossible de lire la version distante.^0')
+                    end
+                else
+                    print('^3[Blood-Garage-Creator] ^8⚠ Vérification des mises à jour indisponible (Dépôt privé ou hors-ligne).^0')
+                end
+            end, 'GET')
+        end
+    end, 'GET')
 end)

@@ -2,6 +2,37 @@
 -- BLOODLEAK PREMIUM 2026 SPLIT GARAGE DASHBOARD — CLIENT/ADMIN.LUA
 -- ============================================================
 
+-- Helper de normalisation universelle pour les points de spawn (indépendant du type d'indexation CEF)
+function normalizeSpawnPoints(spawn)
+    if not spawn then return nil end
+    local normalized = {}
+    
+    -- Si c'est déjà un vecteur FiveM natif directement
+    if type(spawn) == 'userdata' or type(spawn) == 'vector4' or type(spawn) == 'vector3' then
+        return { { x = spawn.x, y = spawn.y, z = spawn.z, w = spawn.w or spawn.heading or 0.0 } }
+    end
+
+    if type(spawn) ~= 'table' then return nil end
+
+    -- Si c'est un point unique indexé par ses axes (ex: { x = ..., y = ... })
+    if spawn.x then
+        return { { x = tonumber(spawn.x) or 0.0, y = tonumber(spawn.y) or 0.0, z = tonumber(spawn.z) or 0.0, w = tonumber(spawn.w or spawn.heading) or 0.0 } }
+    end
+
+    -- Si c'est un tableau de points (avec des clés numériques, chaînes ou des structures complexes)
+    for k, v in pairs(spawn) do
+        if type(v) == 'table' or type(v) == 'userdata' or type(v) == 'vector4' or type(v) == 'vector3' then
+            local x = tonumber(v.x or v[1]) or 0.0
+            local y = tonumber(v.y or v[2]) or 0.0
+            local z = tonumber(v.z or v[3]) or 0.0
+            local w = tonumber(v.w or v[4] or v.heading) or 0.0
+            table.insert(normalized, { x = x, y = y, z = z, w = w })
+        end
+    end
+
+    return #normalized > 0 and normalized or nil
+end
+
 -- Récupérer la position et orientation actuelle du joueur pour la configuration
 RegisterNUICallback('getCurrentCoords', function(data, cb)
     local playerPed = PlayerPedId()
@@ -39,7 +70,7 @@ RegisterNUICallback('startPositionSelection', function(data, cb)
     IsSelectingCoords = true
     
     -- 1. Masquer temporairement l'interface NUI (sans détruire l'état)
-    SendNUIMessage({ action = "tempHide" })
+    SendNUIMessage({ action = "tempHide", type = selectionType })
     SetNuiFocus(false, false)
     
     -- Notification sonore discrète
@@ -54,18 +85,6 @@ RegisterNUICallback('startPositionSelection', function(data, cb)
         
         while selecting do
             Citizen.Wait(0)
-            
-            -- Affiche le texte d'aide à l'écran
-            local labelType = "Spawn Véhicule"
-            if selectionType == "ped" then
-                labelType = "Position PNJ"
-            elseif selectionType == "delete" then
-                labelType = "Rangement Véhicule"
-            end
-            local displayMsg = "~y~[ADMIN]~s~ Mode Sélection (~g~" .. string.upper(labelType) .. "~s~)\nPositionnez-vous sur le point désiré.\n~g~[E]~s~ pour valider la position | ~r~[BACKSPACE]~s~ pour annuler"
-            BeginTextCommandDisplayHelp("STRING")
-            AddTextComponentSubstringPlayerName(displayMsg)
-            EndTextCommandDisplayHelp(0, false, true, -1)
             
             -- Bloquer temporairement certaines touches de combat/tir pour éviter les accidents
             DisableControlAction(0, 24, true) -- Tirer
@@ -145,30 +164,32 @@ AddEventHandler('bl_garage:syncGarages', function(loaded, notify)
                 Config.Garages[tostring(id)] = nil
             elseif data.coords and data.spawn then
                 local pointType = data.type or "impound"
-                local blipSprite = 357
-                local blipColor = 3
-                if pointType == "boat" then
-                    blipSprite = 427
+                local blipSprite = tonumber(data.blipSprite)
+                local blipColor = tonumber(data.blipColor)
+                
+                if not blipSprite or blipSprite == 0 then
+                    blipSprite = 357
+                    if pointType == "boat" then blipSprite = 427
+                    elseif pointType == "air" then blipSprite = 307
+                    elseif pointType == "helicopter" then blipSprite = 422
+                    elseif pointType == "impound" then blipSprite = 68
+                    elseif pointType == "impound_boat" then blipSprite = 427
+                    elseif pointType == "impound_air" then blipSprite = 307
+                    elseif pointType == "impound_helicopter" then blipSprite = 422 end
                     blipColor = 3
-                elseif pointType == "air" then
-                    blipSprite = 307
-                    blipColor = 3
-                elseif pointType == "impound" then
-                    blipSprite = 68
-                    blipColor = 5
+                    if pointType == "impound" then blipColor = 5 end
                 end
 
-                local spawnPoints = nil
-                local firstSpawn = nil
-                if type(data.spawn) == 'table' and data.spawn[1] then
-                    spawnPoints = {}
-                    for _, pt in ipairs(data.spawn) do
-                        table.insert(spawnPoints, vector4(pt.x or 0.0, pt.y or 0.0, pt.z or 0.0, pt.w or pt.heading or 0.0))
+                local normalized = normalizeSpawnPoints(data.spawn)
+                local spawnPoints = {}
+                local firstSpawn = { x = 0.0, y = 0.0, z = 0.0, w = 0.0 }
+                if normalized then
+                    for _, pt in ipairs(normalized) do
+                        table.insert(spawnPoints, vector4(pt.x, pt.y, pt.z, pt.w))
                     end
-                    firstSpawn = data.spawn[1]
+                    firstSpawn = normalized[1]
                 else
-                    spawnPoints = vector4(data.spawn.x or 0.0, data.spawn.y or 0.0, data.spawn.z or 0.0, data.spawn.w or data.spawn.heading or 0.0)
-                    firstSpawn = data.spawn
+                    spawnPoints = { vector4(0.0, 0.0, 0.0, 0.0) }
                 end
 
                 local localData = {
@@ -179,10 +200,14 @@ AddEventHandler('bl_garage:syncGarages', function(loaded, notify)
                     pedHeading = tonumber(data.pedHeading) or 0.0,
                     spawn = spawnPoints,
                     delete = (pointType ~= "impound") and (data.delete and vector3(data.delete.x or 0.0, data.delete.y or 0.0, data.delete.z or 0.0) or vector3(firstSpawn.x or 0.0, firstSpawn.y or 0.0, firstSpawn.z or 0.0)) or nil,
+                    deleteSize = type(data.deleteSize) == 'number' and data.deleteSize or (type(data.deleteSize) == 'string' and tonumber(data.deleteSize) or 7.0),
+                    blipSprite = blipSprite,
+                    blipColor = blipColor,
                     blip = { active = true, sprite = blipSprite, color = blipColor, scale = 0.8, label = data.label },
                     job = nil
                 }
                 Config.Garages[tostring(id)] = localData
+                print(string.format("[bl_garage CLIENT SYNC] id: %s | Nom: %s | spawn (brut): %s | spawn (local): %s", tostring(id), tostring(localData.label), json.encode(data.spawn), json.encode(spawnPoints)))
             end
         end
     end
@@ -204,22 +229,28 @@ AddEventHandler('bl_garage:openMasterAdmin', function()
             if type(g.spawn) == 'table' and g.spawn[1] then
                 spawnData = {}
                 for _, pt in ipairs(g.spawn) do
-                    table.insert(spawnData, { x = pt.x, y = pt.y, z = pt.z, w = pt.w or pt.heading or 0.0 })
+                    table.insert(spawnData, { x = pt.x or pt[1] or 0.0, y = pt.y or pt[2] or 0.0, z = pt.z or pt[3] or 0.0, w = pt.w or pt[4] or pt.heading or 0.0 })
                 end
             else
-                spawnData = { x = g.spawn.x, y = g.spawn.y, z = g.spawn.z, w = g.spawn.w or g.spawn.heading or 0.0 }
+                spawnData = { x = g.spawn.x or g.spawn[1] or 0.0, y = g.spawn.y or g.spawn[2] or 0.0, z = g.spawn.z or g.spawn[3] or 0.0, w = g.spawn.w or g.spawn[4] or g.spawn.heading or 0.0 }
             end
         end
 
         allGaragesList[id] = {
             label = g.label,
             type = g.type or "car",
-            coords = { x = g.coords.x, y = g.coords.y, z = g.coords.z },
+            coords = { x = g.coords.x or g.coords[1] or 0.0, y = g.coords.y or g.coords[2] or 0.0, z = g.coords.z or g.coords[3] or 0.0 },
             pedModel = g.pedModel or "s_m_y_xmech_01",
             pedHeading = g.pedHeading or 0.0,
             spawn = spawnData or { x = 0.0, y = 0.0, z = 0.0, w = 0.0 },
-            delete = g.delete and { x = g.delete.x, y = g.delete.y, z = g.delete.z } or nil
+            delete = g.delete and { x = g.delete.x or g.delete[1] or 0.0, y = g.delete.y or g.delete[2] or 0.0, z = g.delete.z or g.delete[3] or 0.0 } or nil,
+            deleteSize = g.deleteSize or 7.0,
+            blipSprite = g.blipSprite or (g.blip and g.blip.sprite) or 357,
         }
+    end
+
+    for id, g in pairs(allGaragesList) do
+        print(string.format("[bl_garage CLIENT TO NUI] id: %s | Nom: %s | spawn envoyé: %s", tostring(id), tostring(g.label), json.encode(g.spawn)))
     end
 
     SetNuiFocus(true, true)

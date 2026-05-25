@@ -3,7 +3,7 @@ game 'gta5'
 
 description 'BloodLeak Modern Garage System'
 author 'BloodLeak'
-version '1.0.6'
+version '1.8.2'
 
 ui_page 'html/index.html'
 

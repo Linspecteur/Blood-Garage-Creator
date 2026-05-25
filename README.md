@@ -40,14 +40,7 @@ Pour fonctionner de manière optimale, le script nécessite :
 
 ## 🚀 Installation & Utilisation
 
-1. **Base de données :** Importez le code SQL suivant dans votre base de données pour initialiser la persistance :
-   ```sql
-   CREATE TABLE IF NOT EXISTS `bl_garages` (
-       `id` VARCHAR(50) NOT NULL,
-       `data` LONGTEXT NOT NULL,
-       PRIMARY KEY (`id`)
-   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-   ```
+1. **Base de données :** Importez le fichier [database.sql](file:///c:/Users/natha/Desktop/BloodLeak%20v2/bl_garage/database.sql) dans votre base de données SQL pour initialiser la table de persistance.
 2. **Configuration :** Ajustez les prix, grades de staff, et identifiants autorisés dans le [config.lua](file:///c:/Users/natha/Desktop/BloodLeak%20v2/bl_garage/config.lua).
 3. **Démarrage :** Ajoutez la ligne suivante dans votre fichier `server.cfg` :
    ```cfg

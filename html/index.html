@@ -9,7 +9,7 @@
     <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Main Style -->
-    <link rel="stylesheet" href="style.css?v=43">
+    <link rel="stylesheet" href="style.css?v=999">
 </head>
 <body>
     <div id="garage-app" class="hidden">
@@ -150,7 +150,11 @@
                             <option value="car">Garage Voitures (car)</option>
                             <option value="boat">Garage Bateaux (boat)</option>
                             <option value="air">Garage Aéronefs (air)</option>
-                            <option value="impound">Fourrière (impound)</option>
+                            <option value="helicopter">Garage Hélicoptères (helicopter)</option>
+                            <option value="impound">Fourrière Voitures (impound)</option>
+                            <option value="impound_boat">Fourrière Bateaux (impound_boat)</option>
+                            <option value="impound_air">Fourrière Aéronefs (impound_air)</option>
+                            <option value="impound_helicopter">Fourrière Hélicoptères (impound_helicopter)</option>
                         </select>
                     </div>
 
@@ -163,6 +167,36 @@
                             <option value="s_m_m_dockwork_01">Docker (s_m_m_dockwork_01)</option>
                             <option value="s_m_y_garbage">Éboueur (s_m_y_garbage)</option>
                             <option value="ig_benny">Benny (ig_benny)</option>
+                        </select>
+                    </div>
+
+                    <!-- Icône du Blip -->
+                    <div class="admin-field-group">
+                        <label for="admin-blip-sprite">ICÔNE DU BLIP (CARTE)</label>
+                        <select id="admin-blip-sprite" class="admin-select">
+                            <option value="357">Standard Garage (357)</option>
+                            <option value="68">Fourrière / Impound (68)</option>
+                            <option value="427">Bateau / Boat (427)</option>
+                            <option value="307">Avion / Airfield (307)</option>
+                            <option value="43">Hélicoptère (43)</option>
+                            <option value="40">Maison / Propriété (40)</option>
+                            <option value="134">Clé (134)</option>
+                            <option value="616">Étoile Premium (616)</option>
+                        </select>
+                    </div>
+
+                    <!-- Couleur du Blip -->
+                    <div class="admin-field-group">
+                        <label for="admin-blip-color">COULEUR DU BLIP</label>
+                        <select id="admin-blip-color" class="admin-select">
+                            <option value="3">Bleu Indigo (3)</option>
+                            <option value="1">Rouge Sport (1)</option>
+                            <option value="2">Vert Émeraude (2)</option>
+                            <option value="5">Jaune Ambré (5)</option>
+                            <option value="8">Rose Fuchsia (8)</option>
+                            <option value="27">Violet Sombre (27)</option>
+                            <option value="4">Blanc Pur (4)</option>
+                            <option value="39">Gris Graphite (39)</option>
                         </select>
                     </div>
 
@@ -209,6 +243,17 @@
                             <div class="coord-val"><span>Z:</span><input type="number" step="any" id="coord-delete-z" class="coord-input" value="0.0"></div>
                         </div>
                     </div>
+
+                    <!-- Option Taille du Point de Rangement -->
+                    <div class="admin-field-group" id="admin-delete-size-section">
+                        <label for="admin-delete-size">TAILLE DE LA ZONE DE RANGEMENT</label>
+                        <select id="admin-delete-size" class="admin-select">
+                            <option value="3.0">Petite (3 mètres)</option>
+                            <option value="7.0">Standard (7 mètres)</option>
+                            <option value="12.0">Grande (12 mètres)</option>
+                            <option value="18.0">Très Grande (18 mètres)</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="admin-footer" style="display: flex; gap: 10px;">
@@ -224,7 +269,31 @@
         </div>
     </div>
 
+    <!-- Premium Volcanic Selection Overlay HUD Card -->
+    <div id="selection-overlay" class="hidden">
+        <div class="selection-card">
+            <div class="selection-header">
+                <i class="fa-solid fa-crosshairs selection-icon"></i>
+                <div class="selection-header-text">
+                    <h2 id="selection-title">SÉLECTION DE POSITION</h2>
+                    <p id="selection-subtitle">Placement d'un point sur la carte</p>
+                </div>
+            </div>
+            <div class="selection-divider"></div>
+            <div class="selection-body">
+                <div class="selection-instruction">
+                    <span class="key-badge">E</span>
+                    <span class="instruction-text">Valider la position</span>
+                </div>
+                <div class="selection-instruction">
+                    <span class="key-badge cancel">RETOUR</span>
+                    <span class="instruction-text">Annuler la sélection</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Logic Script -->
-    <script src="script.js?v=48"></script>
+    <script src="script.js?v=999"></script>
 </body>
 </html>
