@@ -52,7 +52,16 @@ Pour fonctionner de manière optimale, le script nécessite :
 ## ⌨️ Commandes & Raccourcis
 
 - **`/garageadmin` ou `/admingarage` :** Ouvre le panneau d'administration générale en jeu pour créer, éditer ou supprimer des garages et fourrières sur place en temps réel.
+- **`/exportgarages` :** Exporte instantanément tous les garages de la base de données (fusionnés avec ceux par défaut) dans un fichier `config_exported.lua` prêt à être copié-collé dans votre `config.lua` pour partager vos configurations.
 - **Rangement ([E]) :** Rapprochement d'une zone rouge pour stocker instantanément son véhicule.
+
+---
+
+## 🛠️ Nouveautés de la Version 1.8.2
+
+- **⛵ Fourrière Bateaux par défaut (`FourriereMarina`) :** Un point de fourrière navale natif pré-configuré à la Marina de Los Santos avec spawn de bateaux directement dans l'eau.
+- **🔄 Outil d'exportation vers Config :** Simplifie la distribution et le partage de votre parc automobile en convertissant vos points dynamiques de la base de données en code statique propre.
+- **🔔 Vérificateur de version sémantique :** Système d'alerte minimaliste, compact et élégant qui vérifie les versions sur votre dépôt GitHub (`Linspecteur/Blood-Garage-Creator`) et ne prévient la console qu'en cas de réelle mise à jour disponible.
 
 ---
 

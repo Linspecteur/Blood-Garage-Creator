@@ -382,6 +382,25 @@ end)
 
 local currentVersion = GetResourceMetadata(GetCurrentResourceName(), 'version', 0)
 
+local function compareVersions(v1, v2)
+    -- Retourne true si v2 (GitHub) est strictement supérieur à v1 (Local)
+    local p1 = {}
+    for part in string.gmatch(v1 or "", "[^%.]+") do
+        table.insert(p1, tonumber(part) or 0)
+    end
+    local p2 = {}
+    for part in string.gmatch(v2 or "", "[^%.]+") do
+        table.insert(p2, tonumber(part) or 0)
+    end
+    for i = 1, math.max(#p1, #p2) do
+        local n1 = p1[i] or 0
+        local n2 = p2[i] or 0
+        if n2 > n1 then return true end
+        if n2 < n1 then return false end
+    end
+    return false
+end
+
 local function printModernUpdateCard(current, latest)
     print(string.format("^3[Blood-Garage-Creator] ^1▲ MISE À JOUR DISPONIBLE ^7| ^1v%s ^7-> ^2v%s ^7| ^5https://github.com/Linspecteur/Blood-Garage-Creator^0", current, latest))
 end
@@ -392,7 +411,7 @@ Citizen.CreateThread(function()
         if statusCode == 200 and response then
             local versionMatch = response:match("\n%s*version%s+['\"]([^'\"]+)['\"]")
             if versionMatch then
-                if versionMatch ~= currentVersion then
+                if compareVersions(currentVersion, versionMatch) then
                     printModernUpdateCard(currentVersion, versionMatch)
                 else
                     print(string.format('^3[Blood-Garage-Creator] ^2✔ Script à jour ^7| ^2v%s^0', currentVersion))
@@ -406,7 +425,7 @@ Citizen.CreateThread(function()
                 if statusCode2 == 200 and response2 then
                     local versionMatch = response2:match("\n%s*version%s+['\"]([^'\"]+)['\"]")
                     if versionMatch then
-                        if versionMatch ~= currentVersion then
+                        if compareVersions(currentVersion, versionMatch) then
                             printModernUpdateCard(currentVersion, versionMatch)
                         else
                             print(string.format('^3[Blood-Garage-Creator] ^2✔ Script à jour ^7| ^2v%s^0', currentVersion))
