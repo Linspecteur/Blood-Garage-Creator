@@ -170,41 +170,91 @@ function spawnSinglePed(id)
         if SpawningInProgress[id] and HasModelLoaded(modelHash) then
             -- Double check de sécurité anti-concurrence
             if not SpawnedPeds[id] or not DoesEntityExist(SpawnedPeds[id]) then
-                -- Nettoyer tout PNJ orphelin à cette position exacte avant de spawn
+                -- Rechercher si un PNJ valide existe déjà à cet endroit précis dans le monde
                 local ok, peds = pcall(function() return GetGamePool('CPed') end)
+                local foundOrphan = false
                 if ok and peds then
                     for _, ped in ipairs(peds) do
                         if DoesEntityExist(ped) and not IsPedAPlayer(ped) then
                             local coords = GetEntityCoords(ped)
                             local dist = #(coords - garage.coords)
                             if dist < 1.5 then
-                                SetEntityAsMissionEntity(ped, true, true)
-                                DeletePed(ped)
-                                DeleteEntity(ped)
+                                local model = GetEntityModel(ped)
+                                if model == modelHash then
+                                    -- PNJ identique trouvé : on le réutilise au lieu d'en recréer un
+                                    SpawnedPeds[id] = ped
+                                    SetEntityCoords(ped, garage.coords.x, garage.coords.y, garage.coords.z - 0.98, false, false, false, false)
+                                    SetEntityHeading(ped, garage.pedHeading or 0.0)
+                                    FreezeEntityPosition(ped, true)
+                                    SetEntityInvincible(ped, true)
+                                    SetBlockingOfNonTemporaryEvents(ped, true)
+                                    TaskSetBlockingOfNonTemporaryEvents(ped, true)
+                                    SetPedHearingRange(ped, 0.0) -- Rendre sourd
+                                    SetPedSeeingRange(ped, 0.0)  -- Rendre aveugle
+                                    SetPedAlertState(ped, 0)     -- Calme
+                                    SetPedRelationshipGroupHash(ped, GetHashKey("PLAYER")) -- Ami
+                                    SetPedCanCowerInCover(ped, false)
+                                    SetPedCombatAttributes(ped, 17, false) -- CA_ALWAYS_FLEE = false (ne s'enfuit pas)
+                                    SetPedCombatAttributes(ped, 46, true)  -- CA_IGNORE_GUNSHOTS = true
+                                    TaskStandStill(ped, -1) -- Forcer le surplace absolu
+                                    SpawningInProgress[id] = nil
+                                    return
+                                else
+                                    -- Modèle obsolète/différent, on le nettoie
+                                    SetEntityAsMissionEntity(ped, true, true)
+                                    DeletePed(ped)
+                                    DeleteEntity(ped)
+                                    foundOrphan = true
+                                end
                             end
                         end
                     end
                 end
 
+                if foundOrphan then
+                    Citizen.Wait(150) -- Laisser le temps au moteur de supprimer le vieux PNJ
+                end
+
                 local ped = CreatePed(4, modelHash, garage.coords.x, garage.coords.y, garage.coords.z - 0.98, garage.pedHeading or 0.0, false, true)
+                SpawnedPeds[id] = ped -- Assigner immédiatement pour bloquer toute concurrence durant le wait
                 SetEntityAsMissionEntity(ped, true, true) -- Rendre le PNJ persistant au niveau du moteur
+                
+                -- Attendre un court instant pour que l'entité soit pleinement instanciée par le moteur physique
+                Citizen.Wait(200)
+                
                 SetEntityInvincible(ped, true)
                 SetBlockingOfNonTemporaryEvents(ped, true)
                 TaskSetBlockingOfNonTemporaryEvents(ped, true) -- Force la non-réaction aux événements (coups de feu, etc)
                 SetEntityCanBeDamaged(ped, false)
                 SetPedCanRagdollFromPlayerImpact(ped, false)
                 SetPedCanRagdoll(ped, false)
-                SetPedCanPlayAmbientAnims(ped, true)
-                SetPedFleeAttributes(ped, 0, 0)
-                SetPedCombatAttributes(ped, 17, true)
+                SetPedCanPlayAmbientAnims(ped, false) -- Désactiver les animations d'ambiance qui peuvent déplacer le PNJ
+                SetPedFleeAttributes(ped, 0, false)
+                SetPedHearingRange(ped, 0.0) -- Rendre sourd aux tirs
+                SetPedSeeingRange(ped, 0.0)  -- Rendre aveugle aux armes
+                SetPedAlertState(ped, 0)     -- Etat de calme
+                SetPedRelationshipGroupHash(ped, GetHashKey("PLAYER")) -- Consommer comme allié
+                SetPedCanCowerInCover(ped, false)
+                SetPedCombatAttributes(ped, 17, false) -- CA_ALWAYS_FLEE = false
+                SetPedCombatAttributes(ped, 46, true)  -- CA_IGNORE_GUNSHOTS = true
                 SetEntityProofs(ped, true, true, true, true, true, true, true, true) -- Invulnérable à tout
                 SetPedConfigFlag(ped, 281, true) -- Disable Cowering
-                
+                SetPedConfigFlag(ped, 188, true) -- Désactiver la panique
+                                
                 -- Figer immédiatement pour stabiliser la position au sol
                 FreezeEntityPosition(ped, true)
+                TaskStandStill(ped, -1) -- Forcer le surplace absolu
 
                 SetModelAsNoLongerNeeded(modelHash)
                 SpawnedPeds[id] = ped
+
+                -- Double sécurité : s'assurer qu'il reste gelé 1 seconde plus tard
+                Citizen.CreateThread(function()
+                    Citizen.Wait(1000)
+                    if DoesEntityExist(ped) then
+                        FreezeEntityPosition(ped, true)
+                    end
+                end)
             end
         else
             if not HasModelLoaded(modelHash) then
@@ -255,6 +305,23 @@ Citizen.CreateThread(function()
                 if distPed < 150.0 then
                     if not SpawnedPeds[id] or not DoesEntityExist(SpawnedPeds[id]) then
                         spawnSinglePed(id)
+                    else
+                        local ped = SpawnedPeds[id]
+                        local pCoords = GetEntityCoords(ped)
+                        local distMoved = #(pCoords - garage.coords)
+                        if distMoved > 0.1 or IsPedFleeing(ped) then
+                            -- Si le PNJ a bougé ou fuit, on le replace et on le ré-initialise complètement
+                            SetEntityCoords(ped, garage.coords.x, garage.coords.y, garage.coords.z - 0.98, false, false, false, false)
+                            SetEntityHeading(ped, garage.pedHeading or 0.0)
+                            ClearPedTasksImmediately(ped)
+                            FreezeEntityPosition(ped, true)
+                            TaskStandStill(ped, -1)
+                            SetPedHearingRange(ped, 0.0)
+                            SetPedSeeingRange(ped, 0.0)
+                            SetPedAlertState(ped, 0)
+                            SetPedRelationshipGroupHash(ped, GetHashKey("PLAYER"))
+                        end
+                        FreezeEntityPosition(ped, true)
                     end
                 else
                     if SpawnedPeds[id] and DoesEntityExist(SpawnedPeds[id]) then
@@ -369,6 +436,31 @@ function storeVehicleInGarage(garageId)
     local vehicle = GetVehiclePedIsIn(playerPed, false)
     
     if DoesEntityExist(vehicle) then
+        local vehicleClass = GetVehicleClass(vehicle)
+        local isBoat = (vehicleClass == 14)
+        local isHeli = (vehicleClass == 15)
+        local isPlane = (vehicleClass == 16)
+        local isAir = (isHeli or isPlane)
+        
+        local garage = Config.Garages[garageId]
+        local currentGarageType = garage and garage.type or "car"
+        local canStore = false
+        
+        if currentGarageType == "car" and not isBoat and not isAir then
+            canStore = true
+        elseif currentGarageType == "boat" and isBoat then
+            canStore = true
+        elseif currentGarageType == "air" and isPlane then
+            canStore = true
+        elseif currentGarageType == "helicopter" and isHeli then
+            canStore = true
+        end
+        
+        if not canStore then
+            ESX.ShowNotification(_T('invalid_vehicle_type'))
+            return
+        end
+
         local props = ESX.Game.GetVehicleProperties(vehicle)
         
         -- Demander au serveur de valider la plaque et de stocker
@@ -523,7 +615,7 @@ function openGarageMenu(garageId)
                 showVehicle = true
             elseif currentGarageType == "boat" and isBoat then
                 showVehicle = true
-            elseif currentGarageType == "air" and isAir then
+            elseif currentGarageType == "air" and isPlane then
                 showVehicle = true
             elseif currentGarageType == "helicopter" and isHeli then
                 showVehicle = true

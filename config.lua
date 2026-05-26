@@ -352,6 +352,7 @@ Config.Translations = {
         ['spawn_blocked'] = "La zone de sortie est encombrée par un autre véhicule.",
         ['vehicle_spawned'] = "Votre véhicule a été sorti !",
         ['vehicle_stored'] = "Votre véhicule a été rangé avec succès.",
+        ['invalid_vehicle_type'] = "Vous ne pouvez pas ranger ce type de véhicule dans ce garage.",
         ['not_enough_money'] = "Vous n'avez pas assez d'argent (%s$ requis).",
         ['impound_retrieved'] = "Vous avez payé %s$ pour récupérer votre véhicule.",
         ['no_owned_vehicles'] = "Vous ne possédez aucun véhicule dans ce garage.",
