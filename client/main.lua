@@ -191,7 +191,7 @@ function spawnSinglePed(id)
                                     TaskSetBlockingOfNonTemporaryEvents(ped, true)
                                     SetPedHearingRange(ped, 0.0) -- Rendre sourd
                                     SetPedSeeingRange(ped, 0.0)  -- Rendre aveugle
-                                    SetPedAlertState(ped, 0)     -- Calme
+                                    SetPedAlertness(ped, 0)     -- Calme
                                     SetPedRelationshipGroupHash(ped, GetHashKey("PLAYER")) -- Ami
                                     SetPedCanCowerInCover(ped, false)
                                     SetPedCombatAttributes(ped, 17, false) -- CA_ALWAYS_FLEE = false (ne s'enfuit pas)
@@ -232,7 +232,7 @@ function spawnSinglePed(id)
                 SetPedFleeAttributes(ped, 0, false)
                 SetPedHearingRange(ped, 0.0) -- Rendre sourd aux tirs
                 SetPedSeeingRange(ped, 0.0)  -- Rendre aveugle aux armes
-                SetPedAlertState(ped, 0)     -- Etat de calme
+                SetPedAlertness(ped, 0)     -- Etat de calme
                 SetPedRelationshipGroupHash(ped, GetHashKey("PLAYER")) -- Consommer comme allié
                 SetPedCanCowerInCover(ped, false)
                 SetPedCombatAttributes(ped, 17, false) -- CA_ALWAYS_FLEE = false
@@ -318,7 +318,7 @@ Citizen.CreateThread(function()
                             TaskStandStill(ped, -1)
                             SetPedHearingRange(ped, 0.0)
                             SetPedSeeingRange(ped, 0.0)
-                            SetPedAlertState(ped, 0)
+                            SetPedAlertness(ped, 0)
                             SetPedRelationshipGroupHash(ped, GetHashKey("PLAYER"))
                         end
                         FreezeEntityPosition(ped, true)
