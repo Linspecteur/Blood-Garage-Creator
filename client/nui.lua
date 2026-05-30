@@ -126,7 +126,6 @@ RegisterNUICallback('spawnVehicle', function(data, cb)
             -- Placer le joueur dedans
             TaskWarpPedIntoVehicle(playerPed, vehicle, -1)
             SetVehicleHasBeenOwnedByPlayer(vehicle, true)
-            SetEntityNeedsValuesToLoad(vehicle, true)
 
             ESX.ShowNotification(_T('vehicle_spawned'))
             cb({ success = true })

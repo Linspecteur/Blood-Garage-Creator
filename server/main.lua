@@ -203,52 +203,61 @@ AddEventHandler('bl_garage:setStoredState', function(plate, state, props, garage
     end
 end)
 
--- Thread de nettoyage automatique des véhicules abandonnés (Toutes les 2 minutes)
+-- Thread de nettoyage automatique des véhicules abandonnés
 Citizen.CreateThread(function()
     while true do
-        Citizen.Wait(120000) -- Attendre 2 minutes
-        local allVehicles = GetAllVehicles()
-        
-        for _, vehicle in ipairs(allVehicles) do
-            if DoesEntityExist(vehicle) then
-                local plate = GetVehicleNumberPlateText(vehicle)
-                if plate then
-                    local cleanPlate = string.gsub(plate, "^%s*(.-)%s*$", "%1"):upper()
-                    
-                    -- Vérifier si le véhicule est vide (pas de chauffeur ni de passagers)
-                    local isPedInside = false
-                    for i = -1, 5 do
-                        local ped = GetPedInVehicleSeat(vehicle, i)
-                        if ped and ped ~= 0 and IsPedAPlayer(ped) then
-                            isPedInside = true
-                            break
-                        end
-                    end
-                    
-                    -- Si personne n'est dans le véhicule
-                    if not isPedInside then
-                        -- Initialiser ou incrémenter le compteur de temps vide
-                        if not Entity(vehicle).state.emptySince then
-                            Entity(vehicle).state.emptySince = os.time()
-                        else
-                            local secondsEmpty = os.time() - Entity(vehicle).state.emptySince
-                            -- Si vide depuis plus de 10 minutes (600 secondes)
-                            if secondsEmpty >= 600 then
-                                -- Vérifier si c'est un véhicule possédé par un joueur
-                                MySQL.query("SELECT plate FROM owned_vehicles WHERE plate = ?", { cleanPlate }, function(results)
-                                    if results and #results > 0 then
-                                        -- Supprimer l'entité côté serveur
-                                        DeleteEntity(vehicle)
-                                        -- Mettre à jour en BDD à la Fourrière (stored = 2)
-                                        updateVehicleStorage(cleanPlate, 2)
-                                        print(string.format("^3[bl_garage]^0 Véhicule abandonné %s supprimé et envoyé à la Fourrière.", cleanPlate))
-                                    end
-                                end)
+        -- Récupérer la configuration de nettoyage
+        local autoImpoundCfg = Config.AutoImpound or {}
+        local isEnabled = autoImpoundCfg.Enabled ~= false -- true par défaut si non spécifié
+        local checkInterval = autoImpoundCfg.CheckInterval or 120000 -- 2 minutes par défaut
+        local abandonTime = autoImpoundCfg.AbandonTime or 600 -- 10 minutes par défaut
+
+        Citizen.Wait(checkInterval) -- Attendre l'intervalle configuré
+
+        if isEnabled then
+            local allVehicles = GetAllVehicles()
+            
+            for _, vehicle in ipairs(allVehicles) do
+                if DoesEntityExist(vehicle) then
+                    local plate = GetVehicleNumberPlateText(vehicle)
+                    if plate then
+                        local cleanPlate = string.gsub(plate, "^%s*(.-)%s*$", "%1"):upper()
+                        
+                        -- Vérifier si le véhicule est vide (pas de chauffeur ni de passagers)
+                        local isPedInside = false
+                        for i = -1, 5 do
+                            local ped = GetPedInVehicleSeat(vehicle, i)
+                            if ped and ped ~= 0 and IsPedAPlayer(ped) then
+                                isPedInside = true
+                                break
                             end
                         end
-                    else
-                        -- Réinitialiser si quelqu'téléchargement remonte dedans
-                        Entity(vehicle).state.emptySince = nil
+                        
+                        -- Si personne n'est dans le véhicule
+                        if not isPedInside then
+                            -- Initialiser ou incrémenter le compteur de temps vide
+                            if not Entity(vehicle).state.emptySince then
+                                Entity(vehicle).state.emptySince = os.time()
+                            else
+                                local secondsEmpty = os.time() - Entity(vehicle).state.emptySince
+                                -- Si vide depuis plus longtemps que le temps configuré
+                                if secondsEmpty >= abandonTime then
+                                    -- Vérifier si c'est un véhicule possédé par un joueur
+                                    MySQL.query("SELECT plate FROM owned_vehicles WHERE plate = ?", { cleanPlate }, function(results)
+                                        if results and #results > 0 then
+                                            -- Supprimer l'entité côté serveur
+                                            DeleteEntity(vehicle)
+                                            -- Mettre à jour en BDD à la Fourrière (stored = 2)
+                                            updateVehicleStorage(cleanPlate, 2)
+                                            print(string.format("^3[bl_garage]^0 Véhicule abandonné %s supprimé et envoyé à la Fourrière (Auto-Impound).", cleanPlate))
+                                        end
+                                    end)
+                                end
+                            end
+                        else
+                            -- Réinitialiser si quelqu'un remonte dedans
+                            Entity(vehicle).state.emptySince = nil
+                        end
                     end
                 end
             end
@@ -380,7 +389,27 @@ AddEventHandler('bl_garage:requestSync', function()
     TriggerClientEvent('bl_garage:syncGarages', src, CustomGarages, false)
 end)
 
-local currentVersion = GetResourceMetadata(GetCurrentResourceName(), 'version', 0)
+local function getLocalVersion()
+    local fileContent = LoadResourceFile(GetCurrentResourceName(), "fxmanifest.lua")
+    if fileContent then
+        for line in fileContent:gmatch("[^\r\n]+") do
+            local trimmed = line:match("^%s*(.-)%s*$")
+            local v = trimmed:match("^version%s+['\"]([^'\"]+)['\"]") or trimmed:match("^version%s*=%s*['\"]([^'\"]+)['\"]")
+            if v then
+                return v
+            end
+        end
+    end
+    
+    local metadata = GetResourceMetadata(GetCurrentResourceName(), 'version', 0)
+    if metadata and metadata ~= "" then
+        return metadata
+    end
+    
+    return "0.0.0"
+end
+
+local currentVersion = getLocalVersion()
 
 local function compareVersions(v1, v2)
     -- Retourne true si v2 (GitHub) est strictement supérieur à v1 (Local)
@@ -407,31 +436,50 @@ end
 
 Citizen.CreateThread(function()
     Citizen.Wait(5000)
-    PerformHttpRequest('https://raw.githubusercontent.com/Linspecteur/Blood-Garage-Creator/main/fxmanifest.lua', function(statusCode, response, headers)
+    
+    -- Recharger dynamiquement la version locale au moment du test pour éviter le cache de FiveM
+    currentVersion = getLocalVersion()
+    
+    local function extractVersion(text)
+        if not text then return nil end
+        for line in text:gmatch("[^\r\n]+") do
+            local trimmed = line:match("^%s*(.-)%s*$")
+            local v = trimmed:match("^version%s+['\"]([^'\"]+)['\"]") or trimmed:match("^version%s*=%s*['\"]([^'\"]+)['\"]")
+            if v then
+                return v
+            end
+        end
+        return nil
+    end
+
+    local urlMain = 'https://raw.githubusercontent.com/Linspecteur/Blood-Garage-Creator/main/fxmanifest.lua?t=' .. os.time()
+    local urlMaster = 'https://raw.githubusercontent.com/Linspecteur/Blood-Garage-Creator/master/fxmanifest.lua?t=' .. os.time()
+
+    PerformHttpRequest(urlMain, function(statusCode, response, headers)
         if statusCode == 200 and response then
-            local versionMatch = response:match("\n%s*version%s+['\"]([^'\"]+)['\"]")
+            local versionMatch = extractVersion(response)
             if versionMatch then
                 if compareVersions(currentVersion, versionMatch) then
                     printModernUpdateCard(currentVersion, versionMatch)
                 else
-                    print(string.format('^3[Blood-Garage-Creator] ^2✔ Script à jour ^7| ^2v%s^0', currentVersion))
+                    print(string.format('^3[Blood-Garage-Creator] ^2✔ Script à jour ^7| ^2v%s (GitHub: v%s)^0', currentVersion, versionMatch))
                 end
             else
-                print('^3[Blood-Garage-Creator] ^8⚠ Impossible de lire la version distante.^0')
+                print('^3[Blood-Garage-Creator] ^8⚠ Impossible de lire la version distante (Format de version invalide).^0')
             end
         else
             -- Si la branche par défaut est 'master' au lieu de 'main'
-            PerformHttpRequest('https://raw.githubusercontent.com/Linspecteur/Blood-Garage-Creator/master/fxmanifest.lua', function(statusCode2, response2, headers2)
+            PerformHttpRequest(urlMaster, function(statusCode2, response2, headers2)
                 if statusCode2 == 200 and response2 then
-                    local versionMatch = response2:match("\n%s*version%s+['\"]([^'\"]+)['\"]")
+                    local versionMatch = extractVersion(response2)
                     if versionMatch then
                         if compareVersions(currentVersion, versionMatch) then
                             printModernUpdateCard(currentVersion, versionMatch)
                         else
-                            print(string.format('^3[Blood-Garage-Creator] ^2✔ Script à jour ^7| ^2v%s^0', currentVersion))
+                            print(string.format('^3[Blood-Garage-Creator] ^2✔ Script à jour ^7| ^2v%s (GitHub: v%s)^0', currentVersion, versionMatch))
                         end
                     else
-                        print('^3[Blood-Garage-Creator] ^8⚠ Impossible de lire la version distante.^0')
+                        print('^3[Blood-Garage-Creator] ^8⚠ Impossible de lire la version distante (Format de version invalide).^0')
                     end
                 else
                     print('^3[Blood-Garage-Creator] ^8⚠ Vérification des mises à jour indisponible (Dépôt privé ou hors-ligne).^0')
