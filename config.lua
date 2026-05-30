@@ -370,6 +370,13 @@ function _T(str, ...)
     return string.format(translation, ...)
 end
 
+-- Configuration du nettoyage automatique des véhicules (Auto-Impound)
+Config.AutoImpound = {
+    Enabled = true,          -- Activer (true) ou désactiver (false) le nettoyage automatique
+    CheckInterval = 120000,  -- Fréquence de vérification des véhicules abandonnés (en millisecondes. Exemple: 120000 = 2 minutes)
+    AbandonTime = 600        -- Temps d'inactivité avant d'envoyer le véhicule à la fourrière (en secondes. Exemple: 600 = 10 minutes)
+}
+
 -- Activer le débogage pour afficher les logs de diagnostic détaillés (Désactivé par défaut)
 Config.Debug = false
 
@@ -379,3 +386,4 @@ function debugPrint(msg)
         print(msg)
     end
 end
+
