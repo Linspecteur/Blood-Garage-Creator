@@ -454,6 +454,11 @@ Citizen.CreateThread(function()
 
     local urlMain = 'https://raw.githubusercontent.com/Linspecteur/Blood-Garage-Creator/main/fxmanifest.lua?t=' .. os.time()
     local urlMaster = 'https://raw.githubusercontent.com/Linspecteur/Blood-Garage-Creator/master/fxmanifest.lua?t=' .. os.time()
+    local reqHeaders = {
+        ["Cache-Control"] = "no-cache, no-store, must-revalidate",
+        ["Pragma"] = "no-cache",
+        ["Expires"] = "0"
+    }
 
     PerformHttpRequest(urlMain, function(statusCode, response, headers)
         if statusCode == 200 and response then
@@ -484,7 +489,7 @@ Citizen.CreateThread(function()
                 else
                     print('^3[Blood-Garage-Creator] ^8⚠ Vérification des mises à jour indisponible (Dépôt privé ou hors-ligne).^0')
                 end
-            end, 'GET')
+            end, 'GET', '', reqHeaders)
         end
-    end, 'GET')
+    end, 'GET', '', reqHeaders)
 end)
