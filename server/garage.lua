@@ -2,6 +2,9 @@
 -- BLOODLEAK PREMIUM 2026 SPLIT GARAGE DASHBOARD — SERVER/GARAGE.LUA
 -- ============================================================
 
+-- Table temporaire pour suivre les véhicules récemment sortis/récupérés (évite la duplication due à la latence de synchro réseau des plaques)
+RecentlySpawned = {}
+
 -- Déclaration des Callbacks joueur une fois ESX disponible
 function registerServerCallbacks()
     -- Callback : Récupérer tous les véhicules possédés par un joueur
@@ -42,7 +45,9 @@ function registerServerCallbacks()
                     end
 
                     -- Si dehors (0) mais plus dans le monde réel -> Auto-impound !
-                    if isStored == 0 and not activePlates[cleanPlate] then
+                    -- Ajout de la vérification du cooldown RecentlySpawned (évite le retour immédiat en fourrière lors de la synchro)
+                    local isRecentlySpawned = RecentlySpawned[cleanPlate] and (os.time() - RecentlySpawned[cleanPlate] < 15)
+                    if isStored == 0 and not activePlates[cleanPlate] and not isRecentlySpawned then
                         v.stored = 2
                         if v.state ~= nil then v.state = 2 end
                         updateVehicleStorage(cleanPlate, 2)
@@ -102,8 +107,32 @@ function registerServerCallbacks()
             if results and #results > 0 then
                 local vehicleData = results[1]
                 
+                -- Lire l'état actuel de stockage
+                local isStored = 0
+                local sVal = vehicleData.stored
+                local stVal = vehicleData.state
+                
+                if sVal == 1 or sVal == true or tonumber(sVal) == 1 or stVal == 1 or stVal == true or tonumber(stVal) == 1 then
+                    isStored = 1
+                elseif sVal == 2 or tonumber(sVal) == 2 or stVal == 2 or tonumber(stVal) == 2 then
+                    isStored = 2
+                end
+
+                -- Empêcher le spawn si le véhicule n'est pas stocké (évite la duplication par double-clic/triche)
+                if isStored ~= 1 then
+                    cb(false)
+                    return
+                end
+
                 -- Mettre à jour en BDD à dehors (stored = 0)
                 updateVehicleStorage(cleanPlate, 0, garageId, xPlayer.identifier, nil, function(affectedRows)
+                    RecentlySpawned[cleanPlate] = os.time()
+                    -- Nettoyage automatique des anciennes entrées
+                    local now = os.time()
+                    for p, t in pairs(RecentlySpawned) do
+                        if now - t > 60 then RecentlySpawned[p] = nil end
+                    end
+
                     local props = safeJsonDecode(vehicleData.vehicle)
                     props.plate = vehicleData.plate -- Force la plaque exacte de la DB
                     cb(true, props)
@@ -147,6 +176,23 @@ function registerServerCallbacks()
                 if results and #results > 0 then
                     local vehicleData = results[1]
                     
+                    -- Lire l'état actuel de stockage
+                    local isStored = 0
+                    local sVal = vehicleData.stored
+                    local stVal = vehicleData.state
+                    
+                    if sVal == 1 or sVal == true or tonumber(sVal) == 1 or stVal == 1 or stVal == true or tonumber(stVal) == 1 then
+                        isStored = 1
+                    elseif sVal == 2 or tonumber(sVal) == 2 or stVal == 2 or tonumber(stVal) == 2 then
+                        isStored = 2
+                    end
+
+                    -- Empêcher la récupération si le véhicule n'est pas en fourrière (évite la duplication)
+                    if isStored ~= 2 then
+                        cb(false)
+                        return
+                    end
+
                     -- Retirer l'argent du compte
                     if account == 'cash' then
                         xPlayer.removeMoney(fee)
@@ -156,6 +202,13 @@ function registerServerCallbacks()
 
                     -- Mettre à jour en BDD à dehors (stored = 0) et assigner au garage actuel
                     updateVehicleStorage(cleanPlate, 0, garageId, xPlayer.identifier, nil, function(affectedRows)
+                        RecentlySpawned[cleanPlate] = os.time()
+                        -- Nettoyage automatique des anciennes entrées
+                        local now = os.time()
+                        for p, t in pairs(RecentlySpawned) do
+                            if now - t > 60 then RecentlySpawned[p] = nil end
+                        end
+
                         local props = safeJsonDecode(vehicleData.vehicle)
                         props.plate = vehicleData.plate
                         cb(true, props)
@@ -202,6 +255,23 @@ function registerServerCallbacks()
                 if results and #results > 0 then
                     local vehicleData = results[1]
                     
+                    -- Lire l'état actuel de stockage
+                    local isStored = 0
+                    local sVal = vehicleData.stored
+                    local stVal = vehicleData.state
+                    
+                    if sVal == 1 or sVal == true or tonumber(sVal) == 1 or stVal == 1 or stVal == true or tonumber(stVal) == 1 then
+                        isStored = 1
+                    elseif sVal == 2 or tonumber(sVal) == 2 or stVal == 2 or tonumber(stVal) == 2 then
+                        isStored = 2
+                    end
+
+                    -- Empêcher le transfert si le véhicule n'est pas stocké dans un autre garage
+                    if isStored ~= 1 then
+                        cb(false)
+                        return
+                    end
+
                     -- Retirer l'argent du compte
                     if account == 'cash' then
                         xPlayer.removeMoney(fee)
@@ -211,6 +281,13 @@ function registerServerCallbacks()
 
                     -- Mettre à jour en BDD à dehors (stored = 0) et assigner au garage actuel
                     updateVehicleStorage(cleanPlate, 0, garageId, xPlayer.identifier, nil, function(affectedRows)
+                        RecentlySpawned[cleanPlate] = os.time()
+                        -- Nettoyage automatique des anciennes entrées
+                        local now = os.time()
+                        for p, t in pairs(RecentlySpawned) do
+                            if now - t > 60 then RecentlySpawned[p] = nil end
+                        end
+
                         local props = safeJsonDecode(vehicleData.vehicle)
                         props.plate = vehicleData.plate
                         cb(true, props)
